@@ -5,7 +5,7 @@ import random
 from typing import List, Optional, Union
 
 from localstack import config
-from localstack.constants import DEFAULT_VOLUME_DIR, DOCKER_IMAGE_NAME
+from localstack.constants import DEFAULT_VOLUME_DIR
 from localstack.utils.collections import ensure_list
 from localstack.utils.container_utils.container_client import (
     ContainerClient,
@@ -13,7 +13,6 @@ from localstack.utils.container_utils.container_client import (
     VolumeInfo,
 )
 from localstack.utils.net import IntOrPort, Port, PortNotAvailableException, PortRange
-from localstack.utils.objects import singleton_factory
 from localstack.utils.strings import to_str
 
 LOG = logging.getLogger(__name__)
@@ -147,23 +146,22 @@ def container_ports_can_be_bound(
         port_mappings.add(port.port, port.port, protocol=port.protocol)
     try:
         result = DOCKER_CLIENT.run_container(
-            _get_ports_check_docker_image(),
-            entrypoint="sh",
-            command=["-c", "echo test123"],
+            "bash",
+            command=["echo", "test123"],
             ports=port_mappings,
             remove=True,
         )
     except Exception as e:
-        if "port is already allocated" not in str(e) and "address already in use" not in str(e):
+        if "address already in use" not in str(e):
             LOG.warning(
-                "Unexpected error when attempting to determine container port status: %s", e
+                "Unexpected error when attempting to determine container port status", exc_info=e
             )
         return False
     # TODO(srw): sometimes the command output from the docker container is "None", particularly when this function is
     #  invoked multiple times consecutively. Work out why.
     if to_str(result[0] or "").strip() != "test123":
         LOG.warning(
-            "Unexpected output when attempting to determine container port status: %s", result[0]
+            "Unexpected output when attempting to determine container port status: %s", result
         )
     return True
 
@@ -238,31 +236,6 @@ def reserve_available_container_port(
     raise PortNotAvailableException(
         f"Unable to determine available Docker container port after {retries} retries"
     )
-
-
-@singleton_factory
-def _get_ports_check_docker_image() -> str:
-    """
-    Determine the Docker image to use for Docker port availability checks.
-    Uses either PORTS_CHECK_DOCKER_IMAGE (if configured), or otherwise inspects the running container's image.
-    """
-    if config.PORTS_CHECK_DOCKER_IMAGE:
-        # explicit configuration takes precedence
-        return config.PORTS_CHECK_DOCKER_IMAGE
-    if not config.is_in_docker:
-        # local import to prevent circular imports
-        from localstack.utils.bootstrap import get_docker_image_to_start
-
-        # Use whatever image the user is trying to run LocalStack with, since they either have
-        # it already, or need it by definition to start LocalStack.
-        return get_docker_image_to_start()
-    try:
-        # inspect the running container to determine the image
-        container = DOCKER_CLIENT.inspect_container(get_current_container_id())
-        return container["Config"]["Image"]
-    except Exception:
-        # fall back to using the default Docker image
-        return DOCKER_IMAGE_NAME
 
 
 DOCKER_CLIENT: ContainerClient = create_docker_client()

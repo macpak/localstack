@@ -14,7 +14,6 @@ from docker.models.containers import Container
 from localstack import config
 from localstack.config import in_docker
 from localstack.testing.pytest import markers
-from localstack.utils import docker_utils
 from localstack.utils.common import is_ipv4_address, save_file, short_uid, to_str
 from localstack.utils.container_utils.container_client import (
     AccessDenied,
@@ -1892,18 +1891,6 @@ class TestDockerPermissions:
             container_name_or_id=container.container_id
         )
         assert security_opt == inspect_result["HostConfig"]["SecurityOpt"]
-
-
-@pytest.fixture
-def set_ports_check_image_alpine(monkeypatch):
-    """Set the ports check Docker image to 'alpine', to avoid pulling the larger localstack image in the tests"""
-
-    def _get_ports_check_docker_image():
-        return "alpine"
-
-    monkeypatch.setattr(
-        docker_utils, "_get_ports_check_docker_image", _get_ports_check_docker_image
-    )
 
 
 @pytest.mark.parametrize("protocol", [None, "tcp", "udp"])
